@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="es-CO">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Mis Finanzas</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0A0A0A">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #0A0A0A;
+      --surface: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.08);
+      --text-pri: #FFFFFF;
+      --text-sec: #8888AA;
+      --accent: #6C63FF;
+      --green: #10B981;
+      --red: #EF4444;
+      --amber: #F59E0B;
+      --cyan: #06B6D4;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text-pri);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      padding-bottom: calc(80px + env(safe-area-inset-bottom));
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    h1, h2, h3, p { margin: 0; }
+    button { background: none; border: none; color: inherit; font: inherit; cursor: pointer; outline: none; }
+    button:active { transform: scale(0.96); transition: transform 0.1s ease; }
+    
+    .card {
+      background: var(--surface);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 18px;
+      margin-bottom: 12px;
+    }
+
+    .tab-enter { transform: translateX(100%); opacity: 0; }
+    .tab-active { transform: translateX(0); opacity: 1; transition: all 0.25s ease; }
+    .tab-exit { transform: translateX(-100%); opacity: 0; }
+
+    .modal-backdrop {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6); z-index: 100;
+      display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .modal-sheet {
+      background: #111; border-top: 1px solid rgba(255,255,255,0.1);
+      padding: 24px; padding-bottom: calc(24px + env(safe-area-inset-bottom));
+      border-radius: 24px 24px 0 0;
+      animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+      max-height: 90vh; overflow-y: auto;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    .progress-bar { background: rgba(255,255,255,0.1); border-radius: 8px; height: 8px; overflow: hidden; margin-top: 8px; }
+    .progress-fill { height: 100%; border-radius: 8px; animation: fillBar 1s ease forwards; }
+    @keyframes fillBar { from { width: 0%; } to { width: var(--target-width); } }
+
+    .tab-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-around;
+      padding-bottom: env(safe-area-inset-bottom); z-index: 50;
+    }
+    .tab-item { padding: 10px 0; display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--text-sec); width: 100%; }
+    .tab-item.active { color: var(--accent); }
+    .tab-indicator { width: 24px; height: 3px; border-radius: 3px; background: var(--accent); margin-top: 4px; }
+
+    .fab {
+      position: fixed; bottom: calc(70px + env(safe-area-inset-bottom)); right: 20px;
+      width: 56px; height: 56px; border-radius: 28px; background: var(--accent); color: white;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+      box-shadow: 0 4px 12px rgba(108,99,255,0.4); z-index: 40;
+    }
+
+    .btn-primary { background: var(--accent); color: #fff; border-radius: 12px; padding: 12px; width: 100%; font-weight: bold; margin-top: 16px; text-align: center; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #fff; border-radius: 12px; padding: 12px; width: 100%; font-weight: bold; margin-top: 8px; text-align: center; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: capitalize; }
+    
+    .section-header { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-sec); margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // --- UTILS ---
+    const formatCOP = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString("es-CO");
+    const hoy = () => new Date().toISOString().split("T")[0];
+    const mesHoy = () => new Date().toISOString().slice(0, 7);
+    const diasHasta = (fecha) => Math.ceil((new Date(fecha).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000);
+
+    const INITIAL_DATA = {
+      cuentas: [
+        { id: 1, nombre: "Bancolombia", saldo: 0 },
+        { id: 2, nombre: "Efectivo",    saldo: 0 },
+        { id: 3, nombre: "Nu",          saldo: 0 },
+        { id: 4, nombre: "PayPal",      saldo: 0 },
+      ],
+      ingresoMensual: 1810000,
+      deudas: [
+        { id: 1, nombre: "Nu (Tarjeta de crédito)", saldo: 424931, fechaPago: "2026-08-04", interesMensual: 1316, comisiones: 22000, abonos: [] }
+      ],
+      gastosFijos: [
+        { id:1, nombre:"Aporte casa",  monto:300000, categoria:"familia",   descripcion:"Aporte mensual para comida y servicios", diaPago:1 },
+        { id:2, nombre:"Plan celular", monto:45900,  categoria:"servicios", descripcion:"Plan móvil — pendiente cambiar a nombre propio", diaPago:1 },
+        { id:3, nombre:"Spotify",      monto:10000,  categoria:"ocio",      descripcion:"Plan familiar compartido", diaPago:1 },
+        { id:4, nombre:"Disney+",      monto:13750,  categoria:"ocio",      descripcion:"Plan Premium compartido con 3 personas", diaPago:1 },
+      ],
+      movimientos: [],
+      metas: [
+        { id:1, nombre:"Moto propia", objetivo:3500000, actual:0, color:"#6C63FF", plazoMeses:3 }
+      ],
+      prestamos: [
+        { id:1, tipo:"me deben", persona:"Hermano 1", monto:64000, abonado:0, historial:[], nota:"" },
+        { id:2, tipo:"debo",     persona:"Mamá",      monto:20000, abonado:0, historial:[], nota:"" },
+      ],
+      negocios: [
+        { id:1, nombre:"PS4",           costoTotal:325000, precioVenta:400000, ganancia:75000, estado:"vendido",  nota:"" },
+        { id:2, nombre:"iPhone 12 Pro", costoTotal:611619, precioVenta:null,   ganancia:null,  estado:"en curso", nota:"Cámara pendiente diagnóstico" },
+      ],
+    };
+
+    const ENTITY_COLORS = { bancolombia:"#F59E0B", nequi:"#8B5CF6", nu:"#8B00FF", nubank:"#8B00FF", daviplata:"#EF4444", davivienda:"#EF4444", bbva:"#3B82F6", itau:"#F97316", paypal:"#1E90FF", efectivo:"#10B981", cash:"#10B981" };
+    const CAT_COLORS = { comida:"#F59E0B", transporte:"#3B82F6", ocio:"#8B5CF6", ropa:"#EC4899", salud:"#10B981", imprevisto:"#EF4444", otro:"#6B7280", familia:"#F97316", servicios:"#06B6D4" };
+
+    function colorCuenta(nombre = "") {
+      const key = nombre.toLowerCase().replace(/[^a-z]/g, "");
+      for (const [k, v] of Object.entries(ENTITY_COLORS)) if (key.includes(k)) return v;
+      let hash = 0;
+      for (let i = 0; i < nombre.length; i++) hash = nombre.charCodeAt(i) + ((hash << 5) - hash);
+      return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
+    }
+
+    function IconoCuenta({ nombre, size = 24 }) {
+      const color = colorCuenta(nombre);
+      return (
+        <div style={{
+          width: size, height: size, borderRadius: "50%", background: color + "22", border: `1.5px solid ${color}`,
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.45, fontWeight: 700, color, flexShrink: 0
+        }}>
+          {(nombre || "?")[0].toUpperCase()}
+        </div>
+      );
+    }
+
+    function validarSaldo(data, cuentaId, monto) {
+      const cuenta = data.cuentas.find(c => c.id === Number(cuentaId));
+      if (!cuenta) return { ok: false, msg: "Seleccioná una cuenta." };
+      if (cuenta.saldo < monto) return { ok: false, msg: `Saldo insuficiente en ${cuenta.nombre}. Tenés ${formatCOP(cuenta.saldo)}, faltan ${formatCOP(monto - cuenta.saldo)}.` };
+      return { ok: true };
+    }
+
+    function ajustarCuenta(cuentas, cuentaId, monto, esEntrada) {
+      return cuentas.map(c => c.id === Number(cuentaId) ? { ...c, saldo: c.saldo + (esEntrada ? monto : -monto) } : c);
+    }
+
+    // --- SHARED COMPONENTS ---
+    function InputMonto({ label, value, onChange, placeholder }) {
+      const displayed = value ? parseInt(value).toLocaleString("es-CO") : "";
+      return (
+        <div style={{ marginBottom: 12 }}>
+          {label && <label style={{ color:"#8888AA", fontSize:12, display:"block", marginBottom:4 }}>{label}</label>}
+          <div style={{ position:"relative" }}>
+            <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#8888AA" }}>$</span>
+            <input inputMode="numeric" value={displayed} onChange={e => onChange(e.target.value.replace(/[^0-9]/g, ""))} placeholder={placeholder || "0"}
+              style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"10px 12px 10px 26px", color:"#fff", fontSize:14, outline:"none", boxSizing:"border-box" }} />
+          </div>
+        </div>
+      );
+    }
+
+    function SelectorCuenta({ cuentas, value, onChange, label="Cuenta" }) {
+      return (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ color:"#8888AA", fontSize:12, display:"block", marginBottom:4 }}>{label}</label>
+          <select value={value} onChange={e => onChange(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none" }}>
+            <option value="" disabled>Selecciona...</option>
+            {cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre} ({formatCOP(c.saldo)})</option>)}
+          </select>
+        </div>
+      );
+    }
+
+    function SelectorCategoria({ value, onChange }) {
+      return (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ color:"#8888AA", fontSize:12, display:"block", marginBottom:4 }}>Categoría</label>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {Object.keys(CAT_COLORS).map(c => (
+              <button key={c} type="button" onClick={() => onChange(c)} style={{
+                background: value === c ? CAT_COLORS[c] : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${value === c ? CAT_COLORS[c] : 'rgba(255,255,255,0.08)'}`,
+                padding: '6px 12px', borderRadius: 16, color: '#fff', fontSize: 12, textTransform: 'capitalize'
+              }}>{c}</button>
+            ))}
+          </div>
+        </div>
+      )
+    }
+
+    function Modal({ children, onClose }) {
+      return (
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+          <div className="modal-sheet">
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // --- TABS ---
+    function TabInicio({ data, setData, setActiveTab }) {
+      const saldoTotal = data.cuentas.reduce((a,c) => a + c.saldo, 0);
+      const totalDeudas = data.deudas.reduce((a,d) => a + d.saldo, 0);
+      const mesAct = mesHoy();
+      const gastosMes = data.movimientos.filter(m => m.fecha?.startsWith(mesAct) && ["gasto","fijo"].includes(m.tipo)).reduce((a,m) => a + m.monto, 0);
+      const ingresosMes = data.movimientos.filter(m => m.fecha?.startsWith(mesAct) && m.tipo === "ingreso").reduce((a,m) => a + m.monto, 0);
+      const fijosPendientes = data.gastosFijos.filter(g => !data.movimientos.some(m => m.fijoId === g.id && m.fecha?.startsWith(mesAct)));
+      
+      const deudasPorFecha = [...data.deudas].sort((a,b) => new Date(a.fechaPago) - new Date(b.fechaPago));
+      const proxDeuda = deudasPorFecha[0];
+      const diasProxDeuda = proxDeuda ? diasHasta(proxDeuda.fechaPago) : null;
+      
+      const [modalCuentas, setModalCuentas] = useState(false);
+      const [modalIngreso, setModalIngreso] = useState(false);
+      
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>Inicio</h1>
+            <div style={{ fontSize:14, color:'var(--text-sec)' }}>{new Date().toLocaleDateString('es-CO', {month:'long', year:'numeric'}).replace(/^\w/, c=>c.toUpperCase())}</div>
+          </div>
+
+          <div className="card" onClick={() => setModalCuentas(true)} style={{ textAlign:'center', cursor:'pointer' }}>
+            <div className="section-header">Saldo Total</div>
+            <div style={{ fontSize:34, fontWeight:800, margin:'4px 0 16px' }}>{formatCOP(saldoTotal)}</div>
+            <div style={{ display:'flex', justifyContent:'center', gap:12, flexWrap:'wrap' }}>
+              {data.cuentas.map(c => (
+                <div key={c.id} style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(255,255,255,0.05)', padding:'4px 8px', borderRadius:16 }}>
+                  <IconoCuenta nombre={c.nombre} size={16} />
+                  <span style={{ fontSize:12 }}>{c.nombre}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize:11, color:'var(--text-sec)', marginTop:12 }}>toca para editar cuentas ›</div>
+          </div>
+
+          <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+            <div className="card" style={{ flex:1, padding:12, textAlign:'center', marginBottom:0 }} onClick={() => setActiveTab(2)}>
+              <div style={{ fontSize:10, color:'var(--text-sec)', textTransform:'uppercase', fontWeight:'bold' }}>Deuda</div>
+              <div style={{ fontSize:14, fontWeight:'bold', color:'var(--red)' }}>{formatCOP(totalDeudas)}</div>
+            </div>
+            <div className="card" style={{ flex:1, padding:12, textAlign:'center', marginBottom:0 }} onClick={() => setActiveTab(1)}>
+              <div style={{ fontSize:10, color:'var(--text-sec)', textTransform:'uppercase', fontWeight:'bold' }}>Gastos mes</div>
+              <div style={{ fontSize:14, fontWeight:'bold', color:'#fff' }}>{formatCOP(gastosMes)}</div>
+            </div>
+            <div className="card" style={{ flex:1, padding:12, textAlign:'center', marginBottom:0 }}>
+              <div style={{ fontSize:10, color:'var(--text-sec)', textTransform:'uppercase', fontWeight:'bold' }}>Ingresos mes</div>
+              <div style={{ fontSize:14, fontWeight:'bold', color:'var(--green)' }}>{formatCOP(ingresosMes)}</div>
+            </div>
+          </div>
+
+          {proxDeuda && diasProxDeuda !== null && (
+            <div className="card" onClick={() => setActiveTab(2)} style={{ border: diasProxDeuda <= 10 ? '1px solid var(--red)' : '', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div className="section-header">Próximo pago</div>
+                <div style={{ fontWeight:'bold' }}>{proxDeuda.nombre}</div>
+              </div>
+              <div className="badge" style={{ background: diasProxDeuda <= 10 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)', color: diasProxDeuda <= 10 ? 'var(--red)' : 'var(--amber)' }}>
+                {diasProxDeuda < 0 ? 'Vencida' : diasProxDeuda === 0 ? 'Hoy' : `Faltan ${diasProxDeuda} d`}
+              </div>
+            </div>
+          )}
+
+          {fijosPendientes.length > 0 && (
+            <div className="card">
+              <div className="section-header" style={{ marginBottom:12 }}>Fijos Pendientes</div>
+              {fijosPendientes.slice(0,3).map(f => (
+                <div key={f.id} style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:8 }}>
+                  <span>{f.nombre}</span>
+                  <span style={{ color:'var(--cyan)' }}>{formatCOP(f.monto)}</span>
+                </div>
+              ))}
+              {fijosPendientes.length > 3 && <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:8 }}>+ {fijosPendientes.length - 3} más</div>}
+              <button className="btn-secondary" onClick={() => setActiveTab(1)} style={{ padding:8, fontSize:12 }}>Ver en Gastos →</button>
+            </div>
+          )}
+
+          {data.metas.length > 0 && (
+            <div className="card">
+              <div className="section-header" style={{ marginBottom:12 }}>Metas Activas</div>
+              {data.metas.map(m => {
+                const pct = Math.min(100, Math.round((m.actual / m.objetivo) * 100));
+                return (
+                  <div key={m.id} onClick={() => setActiveTab(3)} style={{ marginBottom:12 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, fontWeight:'bold' }}>
+                      <span>{m.nombre}</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="progress-bar" style={{ '--target-width': `${pct}%` }}>
+                      <div className="progress-fill" style={{ background: m.color }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <button className="btn-secondary" onClick={() => setModalIngreso(true)} style={{ marginBottom:12 }}>+ Registrar ingreso</button>
+
+          <Chart12Meses movimientos={data.movimientos} />
+
+          <div style={{ marginTop:24 }}>
+            <h2 className="section-header">Historial Reciente</h2>
+            {data.movimientos.slice(0, 8).map(m => (
+              <div key={m.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 0', borderBottom:'1px solid var(--border)' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:'var(--surface)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>
+                    {m.tipo==='ingreso'?'📈':m.tipo==='gasto'?'📉':m.tipo==='fijo'?'📌':m.tipo.includes('abono')?'💳':'🔄'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:'bold', fontSize:14 }}>{m.desc}</div>
+                    <div style={{ fontSize:11, color:'var(--text-sec)' }}>{m.fecha} • {data.cuentas.find(c=>c.id===m.cuentaId)?.nombre||''}</div>
+                  </div>
+                </div>
+                <div style={{ fontWeight:'bold', fontSize:14, color: ['gasto','fijo','abono_deuda'].includes(m.tipo) ? 'var(--red)' : m.tipo==='ingreso'?'var(--green)':'#fff' }}>
+                  {['gasto','fijo','abono_deuda'].includes(m.tipo)?'-':m.tipo==='ingreso'?'+':''}{formatCOP(m.monto)}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {modalCuentas && <ModalCuentas data={data} setData={setData} onClose={() => setModalCuentas(false)} />}
+          {modalIngreso && <ModalIngreso data={data} setData={setData} onClose={() => setModalIngreso(false)} />}
+        </div>
+      );
+    }
+
+    function Chart12Meses({ movimientos }) {
+      const meses = []; const ahora = new Date();
+      for (let i = 11; i >= 0; i--) meses.push(new Date(ahora.getFullYear(), ahora.getMonth() - i, 1).toISOString().slice(0, 7));
+      const datos = meses.map(m => {
+        const movs = movimientos.filter(x => x.fecha && x.fecha.startsWith(m));
+        const gastos = movs.filter(x => ["gasto","fijo"].includes(x.tipo)).reduce((a,b)=>a+b.monto, 0);
+        const ingresos = movs.filter(x => x.tipo==="ingreso").reduce((a,b)=>a+b.monto, 0);
+        return { mes: m, gastos, ingresos };
+      });
+      const maxVal = Math.max(...datos.map(d => Math.max(d.gastos, d.ingresos)), 1);
+      const [tooltip, setTooltip] = useState(null);
+
+      return (
+        <div className="card" style={{ padding: '16px 12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
+            <h2 className="section-header" style={{margin:0}}>Resumen Anual</h2>
+            <div style={{ display: 'flex', gap: 8, fontSize: 10, color: '#8888AA' }}>
+              <span style={{ display:'flex', alignItems:'center', gap:4 }}><div style={{width:8,height:8,background:'var(--red)'}}/> Gastos</span>
+              <span style={{ display:'flex', alignItems:'center', gap:4 }}><div style={{width:8,height:8,background:'var(--green)'}}/> Ingresos</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, position:'relative' }}>
+            {datos.map((d, i) => {
+              const isCurrent = i === 11;
+              const hGastos = Math.max((d.gastos / maxVal) * 100, 3);
+              const hIngresos = Math.max((d.ingresos / maxVal) * 100, 3);
+              return (
+                <div key={d.mes} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', cursor:'pointer' }} onClick={() => setTooltip(tooltip === i ? null : i)}>
+                  <div style={{ display: 'flex', gap: 2, height: 90, alignItems: 'flex-end', width: '100%', justifyContent:'center' }}>
+                    <div style={{ width: 6, height: `${hGastos}%`, background: 'var(--red)', opacity: isCurrent ? 1 : 0.4, borderRadius: '3px 3px 0 0' }} />
+                    <div style={{ width: 6, height: `${hIngresos}%`, background: 'var(--green)', opacity: isCurrent ? 1 : 0.4, borderRadius: '3px 3px 0 0' }} />
+                  </div>
+                  <div style={{ fontSize: 9, marginTop: 8, color: isCurrent ? '#fff' : '#8888AA', fontWeight: isCurrent ? 'bold' : 'normal' }}>
+                    {d.mes.slice(5,7)}
+                  </div>
+                  {tooltip === i && (
+                    <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', background: '#222', padding: 8, borderRadius: 8, fontSize: 11, zIndex: 10, whiteSpace:'nowrap', border:'1px solid #444', pointerEvents:'none' }}>
+                      <div style={{color:'var(--red)'}}>Gastos: {formatCOP(d.gastos)}</div>
+                      <div style={{color:'var(--green)'}}>Ingresos: {formatCOP(d.ingresos)}</div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    function ModalCuentas({ data, setData, onClose }) {
+      const [editId, setEditId] = useState(null);
+      const [nombre, setNombre] = useState("");
+      const [saldo, setSaldo] = useState("");
+      const guardar = () => {
+        if (!nombre) return;
+        setData(prev => {
+          const numSaldo = parseInt(saldo) || 0;
+          if (editId) return { ...prev, cuentas: prev.cuentas.map(c => c.id === editId ? { ...c, nombre, saldo: numSaldo } : c) };
+          return { ...prev, cuentas: [...prev.cuentas, { id: Date.now(), nombre, saldo: numSaldo }] };
+        });
+        setEditId(null); setNombre(""); setSaldo("");
+      };
+      const eliminar = (id) => { if(confirm("¿Eliminar cuenta?")) setData(prev => ({ ...prev, cuentas: prev.cuentas.filter(c => c.id !== id) })); };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Mis Cuentas</h2>
+          {data.cuentas.map(c => (
+            <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12, paddingBottom:12, borderBottom:'1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <IconoCuenta nombre={c.nombre} size={32} />
+                <div><div style={{ fontWeight:'bold', fontSize:14 }}>{c.nombre}</div><div style={{ color:'var(--text-sec)', fontSize:12 }}>{formatCOP(c.saldo)}</div></div>
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={() => { setEditId(c.id); setNombre(c.nombre); setSaldo(c.saldo.toString()); }} style={{ fontSize:18 }}>✏️</button>
+                <button onClick={() => eliminar(c.id)} style={{ fontSize:18 }}>🗑</button>
+              </div>
+            </div>
+          ))}
+          <h3 style={{ fontSize:14, fontWeight:'bold', marginTop:20, marginBottom:12 }}>{editId ? "Editar Cuenta" : "Nueva Cuenta"}</h3>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre de la cuenta" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"10px 12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto value={saldo} onChange={setSaldo} placeholder="Saldo inicial" />
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="btn-primary" style={{marginTop:0}} onClick={guardar}>{editId ? "Guardar" : "Agregar"}</button>
+            {editId && <button className="btn-secondary" style={{marginTop:0}} onClick={() => {setEditId(null); setNombre(""); setSaldo("");}}>Cancelar</button>}
+          </div>
+        </Modal>
+      )
+    }
+
+    function ModalIngreso({ data, setData, onClose }) {
+      const [monto, setMonto] = useState("");
+      const [desc, setDesc] = useState("");
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const registrar = () => {
+        if(!monto || !cuentaId) return alert("Faltan datos");
+        const val = parseInt(monto);
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, val, true),
+          movimientos: [{ id: Date.now(), tipo: "ingreso", desc: desc||"Ingreso", monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>Registrar Ingreso</h2>
+          <InputMonto label="Monto" value={monto} onChange={setMonto} />
+          <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Descripción (ej. Salario)" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={registrar}>Registrar</button>
+        </Modal>
+      )
+    }
+
+    function TabGastos({ data, setData }) {
+      const mes = mesHoy();
+      const fijos = data.gastosFijos;
+      const fijosPagados = fijos.filter(f => data.movimientos.some(m => m.fijoId === f.id && m.fecha.startsWith(mes)));
+      const fijosPendientes = fijos.filter(f => !data.movimientos.some(m => m.fijoId === f.id && m.fecha.startsWith(mes)));
+      const variables = data.movimientos.filter(m => m.tipo === "gasto" && m.fecha.startsWith(mes)).sort((a,b)=>b.id-a.id);
+      const totalGastado = fijosPagados.reduce((a,b)=>a+b.monto,0) + variables.reduce((a,b)=>a+b.monto,0);
+
+      const [modalFijo, setModalFijo] = useState(null); // { id, monto, nombre } for payment
+      const [modalGasto, setModalGasto] = useState(false);
+      const [modalEditFijo, setModalEditFijo] = useState(false);
+
+      const deshacerFijo = (fijoId) => {
+        const mov = data.movimientos.find(m => m.fijoId === fijoId && m.fecha.startsWith(mes));
+        if (mov) {
+          setData(prev => ({
+            ...prev, cuentas: ajustarCuenta(prev.cuentas, mov.cuentaId, mov.monto, true),
+            movimientos: prev.movimientos.filter(m => m.id !== mov.id)
+          }));
+        }
+      };
+      
+      const eliminarVar = (mov) => {
+        if(confirm("¿Eliminar gasto?")) {
+          setData(prev => ({
+            ...prev, cuentas: ajustarCuenta(prev.cuentas, mov.cuentaId, mov.monto, true),
+            movimientos: prev.movimientos.filter(m => m.id !== mov.id)
+          }));
+        }
+      };
+
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <h1 style={{ fontSize:22, fontWeight:800, marginBottom:16 }}>Gastos</h1>
+          
+          <div className="card" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div className="section-header">Total Gastado Mes</div>
+              <div style={{ fontSize:28, fontWeight:800 }}>{formatCOP(totalGastado)}</div>
+            </div>
+            {fijosPendientes.length > 0 && <div style={{ fontSize:12, color:'var(--cyan)', textAlign:'right' }}>Fijos ptes:<br/>{formatCOP(fijosPendientes.reduce((a,b)=>a+b.monto,0))}</div>}
+          </div>
+
+          <h2 className="section-header" style={{ marginTop:24, marginBottom:12 }}>Gastos Fijos</h2>
+          {fijosPendientes.map(f => (
+            <div key={f.id} className="card" style={{ padding:14, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span>⭕</span><span style={{ fontWeight:'bold' }}>{f.nombre}</span>
+                  <span className="badge" style={{ background: CAT_COLORS[f.categoria], color:'#fff' }}>{f.categoria}</span>
+                </div>
+                <div style={{ fontSize:11, color:'var(--text-sec)', marginTop:4 }}>{f.descripcion}</div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                <span style={{ fontWeight:'bold', color:'var(--cyan)' }}>{formatCOP(f.monto)}</span>
+                <button className="badge" style={{ background:'var(--cyan)', color:'#000' }} onClick={() => setModalFijo({id:f.id, nombre:f.nombre, monto:f.monto})}>Pagar</button>
+              </div>
+            </div>
+          ))}
+          {fijosPagados.map(f => (
+            <div key={f.id} className="card" style={{ padding:14, display:'flex', justifyContent:'space-between', alignItems:'center', opacity:0.6 }}>
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span>✅</span><span style={{ fontWeight:'bold', textDecoration:'line-through' }}>{f.nombre}</span>
+                </div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                <span style={{ fontWeight:'bold', color:'var(--text-sec)' }}>{formatCOP(f.monto)}</span>
+                <button className="badge" style={{ background:'var(--surface)', color:'#fff' }} onClick={() => deshacerFijo(f.id)}>Deshacer</button>
+              </div>
+            </div>
+          ))}
+          <button className="btn-secondary" style={{ marginTop:0 }} onClick={() => setModalEditFijo(true)}>+ Nuevo gasto fijo</button>
+
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:32, marginBottom:12 }}>
+            <h2 className="section-header" style={{ margin:0 }}>Variables</h2>
+            <button className="badge" style={{ background:'var(--accent)', color:'#fff', padding:'6px 12px' }} onClick={() => setModalGasto(true)}>+ Registrar</button>
+          </div>
+          {variables.length === 0 && <div style={{ textAlign:'center', color:'var(--text-sec)', fontSize:14, padding:20 }}>Sin gastos variables este mes.</div>}
+          {variables.map(m => (
+            <div key={m.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 0', borderBottom:'1px solid var(--border)' }}>
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontWeight:'bold', fontSize:14 }}>{m.desc}</span>
+                  <span className="badge" style={{ background: CAT_COLORS[m.categoria] || '#666' }}>{m.categoria}</span>
+                </div>
+                <div style={{ fontSize:11, color:'var(--text-sec)', marginTop:4 }}>{m.fecha} • {data.cuentas.find(c=>c.id===m.cuentaId)?.nombre}</div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <span style={{ fontWeight:'bold', color:'var(--red)' }}>-{formatCOP(m.monto)}</span>
+                <button onClick={() => eliminarVar(m)} style={{ fontSize:16 }}>🗑</button>
+              </div>
+            </div>
+          ))}
+
+          {modalFijo && <ModalPagarFijo data={data} setData={setData} fijo={modalFijo} onClose={() => setModalFijo(null)} />}
+          {modalGasto && <ModalRegistrarGasto data={data} setData={setData} onClose={() => setModalGasto(false)} />}
+          {modalEditFijo && <ModalEditFijo data={data} setData={setData} onClose={() => setModalEditFijo(false)} />}
+        </div>
+      )
+    }
+
+    function ModalPagarFijo({ data, setData, fijo, onClose }) {
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const pagar = () => {
+        if(!cuentaId) return;
+        const val = validarSaldo(data, cuentaId, fijo.monto);
+        if(!val.ok) return alert(val.msg);
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, fijo.monto, false),
+          movimientos: [{ id: Date.now(), tipo: "fijo", desc: fijo.nombre, monto: fijo.monto, cuentaId: Number(cuentaId), fecha: hoy(), fijoId: fijo.id }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Pagar {fijo.nombre}</h2>
+          <div style={{ fontSize:28, fontWeight:800, marginBottom:16, color:'var(--cyan)' }}>{formatCOP(fijo.monto)}</div>
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={pagar}>Confirmar Pago</button>
+        </Modal>
+      )
+    }
+
+    function ModalRegistrarGasto({ data, setData, onClose }) {
+      const [desc, setDesc] = useState("");
+      const [monto, setMonto] = useState("");
+      const [cat, setCat] = useState("otro");
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const registrar = () => {
+        if(!desc || !monto || !cuentaId) return alert("Faltan datos");
+        const val = parseInt(monto);
+        const check = validarSaldo(data, cuentaId, val);
+        if(!check.ok) return alert(check.msg);
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, val, false),
+          movimientos: [{ id: Date.now(), tipo: "gasto", desc, monto: val, cuentaId: Number(cuentaId), fecha: hoy(), categoria: cat }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Registrar Gasto</h2>
+          <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="¿En qué gastaste?" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Monto" value={monto} onChange={setMonto} />
+          <SelectorCategoria value={cat} onChange={setCat} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={registrar}>Guardar</button>
+        </Modal>
+      )
+    }
+
+    function ModalEditFijo({ data, setData, onClose }) {
+      const [nombre, setNombre] = useState("");
+      const [monto, setMonto] = useState("");
+      const [cat, setCat] = useState("otro");
+      const [desc, setDesc] = useState("");
+      const guardar = () => {
+        if(!nombre || !monto) return alert("Faltan datos");
+        setData(prev => ({
+          ...prev, gastosFijos: [...prev.gastosFijos, { id: Date.now(), nombre, monto: parseInt(monto), categoria: cat, descripcion: desc, diaPago: 1 }]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Nuevo Gasto Fijo</h2>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Monto" value={monto} onChange={setMonto} />
+          <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Descripción breve" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <SelectorCategoria value={cat} onChange={setCat} />
+          <button className="btn-primary" onClick={guardar}>Crear</button>
+        </Modal>
+      )
+    }
+
+    function TabDeudas({ data, setData }) {
+      const [modalAbono, setModalAbono] = useState(null); // deuda object
+      const [modalNueva, setModalNueva] = useState(false);
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>Deudas</h1>
+            <button className="badge" style={{ background:'var(--accent)', color:'#fff', padding:'6px 12px' }} onClick={() => setModalNueva(true)}>+ Nueva</button>
+          </div>
+          {data.deudas.map(d => {
+            const dias = diasHasta(d.fechaPago);
+            return (
+              <div key={d.id} className="card">
+                <div style={{ display:'flex', justifyContent:'space-between' }}>
+                  <h3 style={{ fontSize:16, fontWeight:'bold' }}>{d.nombre}</h3>
+                  <div className="badge" style={{ background: dias <= 10 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)', color: dias <= 10 ? 'var(--red)' : 'var(--amber)' }}>
+                    {dias < 0 ? 'Vencida' : dias === 0 ? 'Hoy' : `Faltan ${dias}d`}
+                  </div>
+                </div>
+                <div style={{ fontSize:28, fontWeight:800, color:'var(--red)', margin:'8px 0' }}>{formatCOP(d.saldo)}</div>
+                <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:12 }}>
+                  <div>Vence: {d.fechaPago}</div>
+                  {d.interesMensual > 0 && <span>Int: {formatCOP(d.interesMensual)} • </span>}
+                  {d.comisiones > 0 && <span>Com: {formatCOP(d.comisiones)}</span>}
+                </div>
+                <button className="btn-secondary" style={{ marginTop:0 }} onClick={() => setModalAbono(d)}>Registrar Abono</button>
+              </div>
+            )
+          })}
+          {modalAbono && <ModalAbonoDeuda data={data} setData={setData} deuda={modalAbono} onClose={() => setModalAbono(null)} />}
+          {modalNueva && <ModalNuevaDeuda data={data} setData={setData} onClose={() => setModalNueva(false)} />}
+        </div>
+      )
+    }
+
+    function ModalAbonoDeuda({ data, setData, deuda, onClose }) {
+      const [monto, setMonto] = useState("");
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const registrar = () => {
+        const val = parseInt(monto);
+        if(!val || !cuentaId) return;
+        const check = validarSaldo(data, cuentaId, val);
+        if(!check.ok) return alert(check.msg);
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, val, false),
+          deudas: prev.deudas.map(d => d.id === deuda.id ? { ...d, saldo: Math.max(0, d.saldo - val), abonos: [...d.abonos, { monto:val, fecha:hoy() }] } : d),
+          movimientos: [{ id: Date.now(), tipo: "abono_deuda", desc: `Abono a ${deuda.nombre}`, monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Abonar a {deuda.nombre}</h2>
+          <div style={{ fontSize:14, color:'var(--text-sec)', marginBottom:16 }}>Saldo actual: {formatCOP(deuda.saldo)}</div>
+          <InputMonto label="Monto del abono" value={monto} onChange={setMonto} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={registrar}>Abonar</button>
+        </Modal>
+      )
+    }
+
+    function ModalNuevaDeuda({ data, setData, onClose }) {
+      const [nombre, setNombre] = useState(""); const [saldo, setSaldo] = useState(""); const [fecha, setFecha] = useState(hoy());
+      const [interes, setInteres] = useState(""); const [comision, setComision] = useState("");
+      const guardar = () => {
+        if(!nombre || !saldo) return alert("Faltan datos");
+        setData(prev => ({
+          ...prev, deudas: [...prev.deudas, { id: Date.now(), nombre, saldo: parseInt(saldo), fechaPago: fecha, interesMensual: parseInt(interes)||0, comisiones: parseInt(comision)||0, abonos: [] }]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Nueva Deuda</h2>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Nombre (ej. Tarjeta Crédito)" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Saldo actual" value={saldo} onChange={setSaldo} />
+          <div style={{ marginBottom: 12 }}><label style={{ color:"#8888AA", fontSize:12, display:"block", marginBottom:4 }}>Fecha de pago (próxima)</label><input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none" }} /></div>
+          <div style={{ display:'flex', gap:12 }}>
+            <div style={{flex:1}}><InputMonto label="Interés mes" value={interes} onChange={setInteres} /></div>
+            <div style={{flex:1}}><InputMonto label="Comisiones" value={comision} onChange={setComision} /></div>
+          </div>
+          <button className="btn-primary" onClick={guardar}>Crear</button>
+        </Modal>
+      )
+    }
+
+    function TabMetas({ data, setData }) {
+      const [modalAbono, setModalAbono] = useState(null);
+      const [modalNueva, setModalNueva] = useState(false);
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>Metas</h1>
+            <button className="badge" style={{ background:'var(--accent)', color:'#fff', padding:'6px 12px' }} onClick={() => setModalNueva(true)}>+ Nueva</button>
+          </div>
+          {data.metas.map(m => {
+            const pct = Math.min(100, Math.round((m.actual / m.objetivo) * 100));
+            const faltante = Math.max(0, m.objetivo - m.actual);
+            const cuota = Math.ceil(faltante / (m.plazoMeses || 1));
+            return (
+              <div key={m.id} className="card">
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <h3 style={{ fontSize:16, fontWeight:'bold' }}>{m.nombre}</h3>
+                  <div className="badge" style={{ background: m.color, color:'#fff' }}>{pct}%</div>
+                </div>
+                <div className="progress-bar" style={{ '--target-width': `${pct}%`, margin:'12px 0' }}><div className="progress-fill" style={{ background: m.color }} /></div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:12 }}>
+                  <span style={{ color:'var(--green)' }}>Ahorrado: {formatCOP(m.actual)}</span>
+                  <span style={{ color:'var(--text-sec)' }}>Meta: {formatCOP(m.objetivo)}</span>
+                </div>
+                {faltante > 0 && (
+                  <div style={{ background:'rgba(255,255,255,0.03)', padding:10, borderRadius:8, fontSize:11, color:'var(--text-sec)', marginBottom:12 }}>
+                    Faltan {formatCOP(faltante)} · Ahorrando <b style={{color:'#fff'}}>{formatCOP(cuota)}/mes</b> lo lográs en {m.plazoMeses} mes(es).
+                  </div>
+                )}
+                {faltante > 0 && <button className="btn-secondary" style={{ marginTop:0 }} onClick={() => setModalAbono({meta:m, cuota})}>+ Agregar ahorro</button>}
+              </div>
+            )
+          })}
+          {modalAbono && <ModalAbonoMeta data={data} setData={setData} meta={modalAbono.meta} cuota={modalAbono.cuota} onClose={() => setModalAbono(null)} />}
+          {modalNueva && <ModalNuevaMeta data={data} setData={setData} onClose={() => setModalNueva(false)} />}
+        </div>
+      )
+    }
+
+    function ModalAbonoMeta({ data, setData, meta, cuota, onClose }) {
+      const [monto, setMonto] = useState(cuota.toString());
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const registrar = () => {
+        const val = parseInt(monto); if(!val || !cuentaId) return;
+        const check = validarSaldo(data, cuentaId, val); if(!check.ok) return alert(check.msg);
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, val, false),
+          metas: prev.metas.map(m => m.id === meta.id ? { ...m, actual: m.actual + val } : m),
+          movimientos: [{ id: Date.now(), tipo: "meta", desc: `Ahorro para ${meta.nombre}`, monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Aportar a {meta.nombre}</h2>
+          <InputMonto label="Monto" value={monto} onChange={setMonto} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={registrar}>Aportar</button>
+        </Modal>
+      )
+    }
+
+    function ModalNuevaMeta({ data, setData, onClose }) {
+      const [nombre, setNombre] = useState(""); const [obj, setObj] = useState(""); const [plazo, setPlazo] = useState("6");
+      const guardar = () => {
+        if(!nombre || !obj) return;
+        setData(prev => ({ ...prev, metas: [...prev.metas, { id: Date.now(), nombre, objetivo: parseInt(obj), actual: 0, color: `hsl(${Math.random()*360},70%,60%)`, plazoMeses: parseInt(plazo)||6 }] }));
+        onClose();
+      };
+      const cuota = (parseInt(obj)||0) / (parseInt(plazo)||1);
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Nueva Meta</h2>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="¿Qué quieres lograr?" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Objetivo ($)" value={obj} onChange={setObj} />
+          <div style={{ marginBottom: 12 }}><label style={{ color:"#8888AA", fontSize:12, display:"block", marginBottom:4 }}>¿En cuántos meses querés lograrlo? (por defecto 6)</label><input type="number" value={plazo} onChange={e=>setPlazo(e.target.value)} style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none" }} /></div>
+          {obj && <div style={{ fontSize:12, color:'var(--cyan)', marginBottom:12 }}>Tendrías que ahorrar {formatCOP(Math.ceil(cuota))} por mes</div>}
+          <button className="btn-primary" onClick={guardar}>Crear Meta</button>
+        </Modal>
+      )
+    }
+
+    function TabNegocios({ data, setData }) {
+      const enCurso = data.negocios.filter(n => n.estado === "en curso");
+      const vendidos = data.negocios.filter(n => n.estado === "vendido");
+      const gananciasTotales = vendidos.reduce((a,b)=>a+(b.ganancia||0), 0);
+      const [modalVenta, setModalVenta] = useState(null);
+      const [modalNuevo, setModalNuevo] = useState(false);
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>Negocios</h1>
+            <button className="badge" style={{ background:'var(--accent)', color:'#fff', padding:'6px 12px' }} onClick={() => setModalNuevo(true)}>+ Nuevo</button>
+          </div>
+          <div className="card" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div><div className="section-header">Ganancias Totales</div><div style={{ fontSize:28, fontWeight:800, color:'var(--green)' }}>+{formatCOP(gananciasTotales)}</div></div>
+            <div style={{ textAlign:'right', fontSize:12, color:'var(--text-sec)' }}>{vendidos.length} cerrados</div>
+          </div>
+          {enCurso.length > 0 && <h2 className="section-header" style={{ marginTop:24, marginBottom:12 }}>En Curso</h2>}
+          {enCurso.map(n => (
+            <div key={n.id} className="card">
+              <h3 style={{ fontSize:16, fontWeight:'bold', marginBottom:8 }}>{n.nombre}</h3>
+              <div style={{ fontSize:14 }}>Invertido: <span style={{fontWeight:'bold'}}>{formatCOP(n.costoTotal)}</span></div>
+              {n.nota && <div style={{ fontSize:11, color:'var(--amber)', marginTop:8, background:'rgba(245,158,11,0.1)', padding:'6px 10px', borderRadius:8 }}>{n.nota}</div>}
+              <button className="btn-secondary" onClick={() => setModalVenta(n)}>Registrar Venta</button>
+            </div>
+          ))}
+          {vendidos.length > 0 && <h2 className="section-header" style={{ marginTop:24, marginBottom:12 }}>Vendidos</h2>}
+          {vendidos.map(n => (
+            <div key={n.id} className="card" style={{ padding:14 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                <h3 style={{ fontSize:14, fontWeight:'bold' }}>{n.nombre}</h3>
+                <div className="badge" style={{ background: n.ganancia>=0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: n.ganancia>=0 ? 'var(--green)' : 'var(--red)' }}>
+                  {n.ganancia>=0?'+':''}{formatCOP(n.ganancia)}
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:'var(--text-sec)' }}>Compra: {formatCOP(n.costoTotal)} → Venta: {formatCOP(n.precioVenta)}</div>
+            </div>
+          ))}
+          {modalVenta && <ModalVentaNegocio data={data} setData={setData} negocio={modalVenta} onClose={() => setModalVenta(null)} />}
+          {modalNuevo && <ModalNuevoNegocio data={data} setData={setData} onClose={() => setModalNuevo(false)} />}
+        </div>
+      )
+    }
+
+    function ModalVentaNegocio({ data, setData, negocio, onClose }) {
+      const [precio, setPrecio] = useState(""); const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const val = parseInt(precio)||0; const gan = val - negocio.costoTotal;
+      const guardar = () => {
+        if(!val || !cuentaId) return;
+        setData(prev => ({
+          ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, val, true),
+          negocios: prev.negocios.map(n => n.id === negocio.id ? { ...n, precioVenta: val, ganancia: gan, estado: "vendido" } : n),
+          movimientos: [{ id: Date.now(), tipo: "negocio_venta", desc: `Venta ${negocio.nombre}`, monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...prev.movimientos]
+        }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>Vender {negocio.nombre}</h2>
+          <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:16 }}>Costo total: {formatCOP(negocio.costoTotal)}</div>
+          <InputMonto label="Precio de venta" value={precio} onChange={setPrecio} />
+          {precio && <div style={{ fontSize:14, fontWeight:'bold', color: gan>=0 ? 'var(--green)' : 'var(--red)', marginBottom:12 }}>{gan>=0?'Ganancia':'Pérdida'}: {formatCOP(Math.abs(gan))}</div>}
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} label="Entra a" />
+          <button className="btn-primary" onClick={guardar}>Confirmar Venta</button>
+        </Modal>
+      )
+    }
+
+    function ModalNuevoNegocio({ data, setData, onClose }) {
+      const [nombre, setNombre] = useState(""); const [costo, setCosto] = useState(""); const [nota, setNota] = useState("");
+      const [cuentaId, setCuentaId] = useState("");
+      const guardar = () => {
+        const val = parseInt(costo); if(!nombre || !val) return;
+        if(cuentaId) {
+          const check = validarSaldo(data, cuentaId, val); if(!check.ok) return alert(check.msg);
+        }
+        setData(prev => {
+          let nData = { ...prev, negocios: [{ id: Date.now(), nombre, costoTotal: val, precioVenta: null, ganancia: null, estado: "en curso", nota }, ...prev.negocios] };
+          if(cuentaId) {
+            nData.cuentas = ajustarCuenta(nData.cuentas, cuentaId, val, false);
+            nData.movimientos = [{ id: Date.now(), tipo: "negocio_compra", desc: `Compra ${nombre}`, monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...nData.movimientos];
+          }
+          return nData;
+        });
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Nuevo Negocio (Reventa)</h2>
+          <input value={nombre} onChange={e=>setNombre(e.target.value)} placeholder="Artículo" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Costo total de inversión" value={costo} onChange={setCosto} />
+          <input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} label="Salió de (opcional)" />
+          <button className="btn-primary" onClick={guardar}>Registrar</button>
+        </Modal>
+      )
+    }
+
+    function TabPrestamos({ data, setData }) {
+      const meDeben = data.prestamos.filter(p => p.tipo === "me deben").reduce((a,b) => a + (b.monto - b.abonado), 0);
+      const debo = data.prestamos.filter(p => p.tipo === "debo").reduce((a,b) => a + (b.monto - b.abonado), 0);
+      const [modalNuevo, setModalNuevo] = useState(false);
+      const [modalAbono, setModalAbono] = useState(null);
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
+            <h1 style={{ fontSize:22, fontWeight:800 }}>Préstamos</h1>
+            <button className="badge" style={{ background:'var(--accent)', color:'#fff', padding:'6px 12px' }} onClick={() => setModalNuevo(true)}>+ Nuevo</button>
+          </div>
+          <div style={{ display:'flex', gap:8, marginBottom:24 }}>
+            <div className="card" style={{ flex:1, padding:12, textAlign:'center', marginBottom:0 }}>
+              <div style={{ fontSize:10, color:'var(--text-sec)', textTransform:'uppercase', fontWeight:'bold' }}>Me deben</div>
+              <div style={{ fontSize:16, fontWeight:'bold', color:'var(--green)' }}>{formatCOP(meDeben)}</div>
+            </div>
+            <div className="card" style={{ flex:1, padding:12, textAlign:'center', marginBottom:0 }}>
+              <div style={{ fontSize:10, color:'var(--text-sec)', textTransform:'uppercase', fontWeight:'bold' }}>Debo</div>
+              <div style={{ fontSize:16, fontWeight:'bold', color:'var(--red)' }}>{formatCOP(debo)}</div>
+            </div>
+          </div>
+          {data.prestamos.map(p => {
+            const pt = p.abonado / p.monto * 100;
+            const pte = p.monto - p.abonado;
+            return (
+              <div key={p.id} className="card">
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                  <h3 style={{ fontSize:16, fontWeight:'bold' }}>{p.persona}</h3>
+                  <div className="badge" style={{ background: p.tipo==="me deben" ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)', color: p.tipo==="me deben" ? 'var(--green)' : 'var(--red)' }}>
+                    {p.tipo === "me deben" ? "Me debe" : "Le debo"}
+                  </div>
+                </div>
+                <div style={{ fontSize:22, fontWeight:800, color: p.tipo==="me deben" ? 'var(--green)' : 'var(--red)', marginBottom:8 }}>{formatCOP(pte)} <span style={{fontSize:12, fontWeight:'normal', color:'var(--text-sec)'}}>pendiente de {formatCOP(p.monto)}</span></div>
+                <div className="progress-bar" style={{ '--target-width': `${pt}%` }}><div className="progress-fill" style={{ background: p.tipo==="me deben" ? 'var(--green)' : 'var(--red)' }} /></div>
+                <div style={{ fontSize:11, color:'var(--text-sec)', marginTop:4, marginBottom:12 }}>Abonado: {formatCOP(p.abonado)} | {Math.round(pt)}%</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button className="btn-secondary" style={{ marginTop:0, flex:1 }} onClick={() => setModalAbono({ p, full:false })}>Registrar {p.tipo==="me deben"?"cobro":"pago"}</button>
+                  <button className="btn-secondary" style={{ marginTop:0, background:'rgba(255,255,255,0.02)' }} onClick={() => setModalAbono({ p, full:true })}>Liquidar</button>
+                </div>
+              </div>
+            )
+          })}
+          {modalNuevo && <ModalNuevoPrestamo data={data} setData={setData} onClose={() => setModalNuevo(false)} />}
+          {modalAbono && <ModalAbonoPrestamo data={data} setData={setData} prestamo={modalAbono.p} full={modalAbono.full} onClose={() => setModalAbono(null)} />}
+        </div>
+      )
+    }
+
+    function ModalNuevoPrestamo({ data, setData, onClose }) {
+      const [tipo, setTipo] = useState("me deben"); const [persona, setPersona] = useState(""); const [monto, setMonto] = useState(""); const [nota, setNota] = useState("");
+      const guardar = () => {
+        const val = parseInt(monto); if(!persona || !val) return;
+        setData(prev => ({ ...prev, prestamos: [{ id: Date.now(), tipo, persona, monto: val, abonado: 0, historial: [], nota }, ...prev.prestamos] }));
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:16 }}>Nuevo Préstamo</h2>
+          <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+            <button className="btn-secondary" style={{ marginTop:0, background: tipo==="me deben" ? 'var(--accent)' : 'rgba(255,255,255,0.1)' }} onClick={() => setTipo("me deben")}>Me deben</button>
+            <button className="btn-secondary" style={{ marginTop:0, background: tipo==="debo" ? 'var(--accent)' : 'rgba(255,255,255,0.1)' }} onClick={() => setTipo("debo")}>Debo</button>
+          </div>
+          <input value={persona} onChange={e=>setPersona(e.target.value)} placeholder="¿Quién?" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <InputMonto label="Monto" value={monto} onChange={setMonto} />
+          <input value={nota} onChange={e=>setNota(e.target.value)} placeholder="Nota (opcional)" style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12 }} />
+          <button className="btn-primary" onClick={guardar}>Guardar</button>
+        </Modal>
+      )
+    }
+
+    function ModalAbonoPrestamo({ data, setData, prestamo, full, onClose }) {
+      const pte = prestamo.monto - prestamo.abonado;
+      const [monto, setMonto] = useState(full ? pte.toString() : "");
+      const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const val = parseInt(monto)||0;
+      const registrar = () => {
+        if(!val || !cuentaId) return;
+        if (prestamo.tipo === "debo") {
+          const check = validarSaldo(data, cuentaId, val); if(!check.ok) return alert(check.msg);
+        }
+        setData(prev => {
+          let nData = { ...prev };
+          nData.cuentas = ajustarCuenta(nData.cuentas, cuentaId, val, prestamo.tipo === "me deben");
+          const esFin = val >= pte;
+          if (esFin) {
+            nData.prestamos = nData.prestamos.filter(p => p.id !== prestamo.id);
+          } else {
+            nData.prestamos = nData.prestamos.map(p => p.id === prestamo.id ? { ...p, abonado: p.abonado + val, historial: [{fecha:hoy(), monto:val}, ...p.historial] } : p);
+          }
+          nData.movimientos = [{ id: Date.now(), tipo: "abono_prestamo", desc: `${prestamo.tipo==="me deben"?"Cobro a":"Pago a"} ${prestamo.persona}`, monto: val, cuentaId: Number(cuentaId), fecha: hoy() }, ...nData.movimientos];
+          return nData;
+        });
+        onClose();
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>{full ? "Liquidar" : "Abonar"} Préstamo</h2>
+          <div style={{ fontSize:14, color:'var(--text-sec)', marginBottom:16 }}>Pendiente: {formatCOP(pte)}</div>
+          {!full && <InputMonto label="Monto" value={monto} onChange={setMonto} />}
+          {!full && monto && <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:12 }}>Quedará pendiente: {formatCOP(Math.max(0, pte - val))}</div>}
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} label={prestamo.tipo==="me deben"?"Entra a":"Sale de"} />
+          <button className="btn-primary" onClick={registrar}>Confirmar</button>
+        </Modal>
+      )
+    }
+
+    function TabSettings({ data, setData, apiKey, setApiKey }) {
+      return (
+        <div style={{ padding: '16px 20px' }}>
+          <h1 style={{ fontSize:22, fontWeight:800, marginBottom:20 }}>Ajustes</h1>
+          <div className="card">
+            <h2 className="section-header">Ingreso Mensual Base</h2>
+            <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:12 }}>Referencia para cálculos (no suma a saldo)</div>
+            <InputMonto value={data.ingresoMensual.toString()} onChange={(v) => setData(prev => ({...prev, ingresoMensual: parseInt(v)||0}))} />
+          </div>
+          <div className="card">
+            <h2 className="section-header">Integración Gemini (AI)</h2>
+            <div style={{ fontSize:12, color:'var(--text-sec)', marginBottom:12 }}>Pega aquí tu API Key para usar el Registro Rápido.</div>
+            <input type="password" value={apiKey} onChange={e => {setApiKey(e.target.value); localStorage.setItem("gemini-key", e.target.value);}} placeholder="AIzaSy..." style={{ width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none" }} />
+          </div>
+        </div>
+      )
+    }
+
+    function ModalAI({ onClose, apiKey, data, setData }) {
+      const [text, setText] = useState(""); const [loading, setLoading] = useState(false); const [cuentaId, setCuentaId] = useState(data.cuentas[0]?.id || "");
+      const procesar = async () => {
+        if (!text) return; if (!apiKey) return alert("Configura la API Key de Gemini en Ajustes (⚙️) primero."); if (!cuentaId) return alert("Selecciona una cuenta.");
+        setLoading(true);
+        try {
+          const prompt = `Analiza la instrucción financiera y devuelve SOLAMENTE un objeto JSON válido con:
+{"tipo": "gasto" o "ingreso", "monto": numero_entero, "desc": "descripción muy breve", "categoria": "comida", "transporte", "ocio", "ropa", "salud", "imprevisto", "otro", "familia", o "servicios"}
+Texto: `;
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt + text }] }] })
+          });
+          const resData = await res.json();
+          const txt = resData.candidates[0].content.parts[0].text;
+          const parsed = JSON.parse(txt.replace(/```json|```/gi, "").trim());
+          if (parsed.tipo === "gasto") {
+            const val = validarSaldo(data, cuentaId, parsed.monto); if (!val.ok) { alert(val.msg); setLoading(false); return; }
+            setData(prev => ({ ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, parsed.monto, false), movimientos: [{ id: Date.now(), tipo: "gasto", desc: parsed.desc, monto: parsed.monto, cuentaId: Number(cuentaId), fecha: hoy(), categoria: parsed.categoria || "otro" }, ...prev.movimientos] }));
+          } else {
+            setData(prev => ({ ...prev, cuentas: ajustarCuenta(prev.cuentas, cuentaId, parsed.monto, true), movimientos: [{ id: Date.now(), tipo: "ingreso", desc: parsed.desc, monto: parsed.monto, cuentaId: Number(cuentaId), fecha: hoy() }, ...prev.movimientos] }));
+          }
+          onClose();
+        } catch (e) { alert("Error: " + e.message); }
+        setLoading(false);
+      };
+      return (
+        <Modal onClose={onClose}>
+          <h2 style={{ fontSize:18, fontWeight:800, marginBottom:8 }}>⚡ Registro Rápido AI</h2>
+          <p style={{ fontSize:12, color:"#8888AA", marginBottom:12 }}>Escribe o dicta qué pasó:</p>
+          <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ej. gasté 15 mil en almuerzo" style={{ width:"100%", height:80, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, padding:"12px", color:"#fff", fontSize:14, outline:"none", marginBottom:12, resize:"none" }} />
+          <SelectorCuenta cuentas={data.cuentas} value={cuentaId} onChange={setCuentaId} />
+          <button className="btn-primary" onClick={procesar} disabled={loading}>{loading ? "Procesando..." : "Registrar"}</button>
+        </Modal>
+      );
+    }
+
+    // --- MAIN APP ---
+    function App() {
+      const [dataState, setDataState] = useState(() => {
+        const saved = localStorage.getItem("finanzas-andres-v3");
+        return saved ? JSON.parse(saved) : INITIAL_DATA;
+      });
+      const setData = (updater) => {
+        setDataState(prev => {
+          const next = typeof updater === "function" ? updater(prev) : updater;
+          localStorage.setItem("finanzas-andres-v3", JSON.stringify(next));
+          return next;
+        });
+      };
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem("gemini-key") || "");
+      const [activeTab, setActiveTab] = useState(0);
+      const [modalAI, setModalAI] = useState(false);
+
+      const tsX = useRef(0); const tsY = useRef(0); const teX = useRef(0); const teY = useRef(0);
+      const onTouchStart = e => { tsX.current = teX.current = e.targetTouches[0].clientX; tsY.current = teY.current = e.targetTouches[0].clientY; };
+      const onTouchMove = e => { teX.current = e.targetTouches[0].clientX; teY.current = e.targetTouches[0].clientY; };
+      const onTouchEnd = () => {
+        const dx = tsX.current - teX.current; const dy = tsY.current - teY.current;
+        if (Math.abs(dx) > 60 && Math.abs(dy) < 40) {
+          if (dx > 0) setActiveTab(a => Math.min(6, a + 1));
+          else setActiveTab(a => Math.max(0, a - 1));
+        }
+      };
+
+      const tabs = [
+        { label:"Inicio", icon:"🏠" }, { label:"Gastos", icon:"💸" }, { label:"Deudas", icon:"💳" },
+        { label:"Metas", icon:"🎯" }, { label:"Negocios", icon:"📦" }, { label:"Préstamos", icon:"🤝" }, { label:"Ajustes", icon:"⚙️" }
+      ];
+
+      return (
+        <div style={{ minHeight: '100vh' }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+          <div key={activeTab} className="tab-active">
+            {activeTab === 0 && <TabInicio data={dataState} setData={setData} setActiveTab={setActiveTab} />}
+            {activeTab === 1 && <TabGastos data={dataState} setData={setData} />}
+            {activeTab === 2 && <TabDeudas data={dataState} setData={setData} />}
+            {activeTab === 3 && <TabMetas data={dataState} setData={setData} />}
+            {activeTab === 4 && <TabNegocios data={dataState} setData={setData} />}
+            {activeTab === 5 && <TabPrestamos data={dataState} setData={setData} />}
+            {activeTab === 6 && <TabSettings data={dataState} setData={setData} apiKey={apiKey} setApiKey={setApiKey} />}
+          </div>
+
+          <button className="fab" onClick={() => setModalAI(true)}>⚡</button>
+          {modalAI && <ModalAI data={dataState} setData={setData} apiKey={apiKey} onClose={() => setModalAI(false)} />}
+
+          <div className="tab-bar">
+            {tabs.map((t, i) => (
+              <div key={i} className={`tab-item ${activeTab === i ? 'active' : ''}`} onClick={() => setActiveTab(i)}>
+                <span style={{ fontSize:18, marginBottom:2, opacity: activeTab === i ? 1 : 0.5 }}>{t.icon}</span>
+                {t.label}
+                {activeTab === i && <div className="tab-indicator" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').catch(console.error);
+    }
+  </script>
+</body>
+</html>
